@@ -6,7 +6,7 @@ import (
 	"github.com/unrolled/render"
 )
 
-func ApiTestHandler(formatter *render.Render) http.HandlerFunc {
+func apiTestHandler(formatter *render.Render) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, req *http.Request) {
 		formatter.JSON(w, http.StatusOK, struct {

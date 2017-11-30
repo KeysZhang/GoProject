@@ -15,9 +15,10 @@ func NewServer() *negroni.Negroni {
 	formatter := render.New(render.Options{
 		IndentJSON: true,
 	})
-
+	
 	n := negroni.Classic()
 	mx := mux.NewRouter()
+	n.Use(negroni.HandlerFunc(midwareGbk))
 
 	initRoutes(mx, formatter)
 
@@ -32,11 +33,10 @@ func initRoutes(mx *mux.Router, formatter *render.Render) {
 			panic("Could not retrive working directory")
 		} else {
 			webRoot = root
-			//fmt.Println(root)
 		}
 	}
-
-	mx.HandleFunc("/api/test", apiTestHandler(formatter)).Methods("GET")
-	mx.PathPrefix("/static").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(webRoot+"/assets/"))))
-
+	mx.HandleFunc("/static/error", errorCheck(formatter)).Methods("GET")
+	mx.HandleFunc("/static/register", register)
+	mx.Handle("/unknown", NotImplementedHandler())
+	mx.PathPrefix("/static").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(webRoot+"/view/"))))
 }
