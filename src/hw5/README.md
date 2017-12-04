@@ -1,362 +1,211 @@
-# 处理 web 程序的输入与输出
+# 实验五  xorm构建数据库服务
+
+[TOC]
 
 </br>
 
-## 支持静态文件服务
+##一. xorm概述
+
+xorm是一个简单而强大的Go语言ORM库. 通过它可以使数据库操作非常简便。xorm的目标并不是让你完全不去学习SQL，我们认为SQL并不会为ORM所替代，但是ORM将可以解决绝大部分的简单SQL需求。xorm支持两种风格的混用。
+
+</br>
+
+## 二. xorm使用
+
+#### 1. 加载驱动：
+
+```
+import (
+	"fmt"
+	"github.com/go-xorm/core"
+	"github.com/go-xorm/xorm"
+	_ "github.com/go-sql-driver/mysql"
+)
+```
+
+`_ "github.com/go-sql-driver/mysql"` 启动包在 init() 阶段，通过调用` xorm.NewEngine(····)`注册驱动到应用中。
+
+```
+var myegine *xorm.Engine
+
+func init() {
+	egine, err := xorm.NewEngine("mysql", "root:zzm15331411@tcp(localhost:3306)/test?charset=utf8")
+	if err != nil {
+		panic(err)
+	}
+	var user UserInfo
+	tbMapper := core.NewPrefixMapper(core.SnakeMapper{}, "golang_xorm_")
+	egine.SetTableMapper(tbMapper)
+	has, _ := egine.IsTableExist(&user)
+	if (!has){
+		egine.CreateTables(&user)
+	}
+	myegine = egine
+}
+```
+
+`tbMapper := core.NewPrefixMapper(core.SnakeMapper{}, "golang_xorm_")`可以创建一个在SnakeMapper的基础上在命名中添加统一的前缀，最终生成的表格的名字是golang_xorm_user_info
+
+创建表使用`engine.CreateTables()`，参数为一个或多个空的对应Struct的指针。
+
+`engine.IsTableExist()`判断表是否为空，参数和CreateTables相同
+
+####2. 访问 CRUD与服务
+
+```
+package entities
+
+//UserInfoAtomicService .
+type UserInfoAtomicService struct{}
+
+//UserInfoService .
+var UserInfoService = UserInfoAtomicService{}
+
+// Save .
+func (*UserInfoAtomicService) Save(u *UserInfo) error {
+	_, err := myegine.Insert(u)
+	checkErr(err)
+	return nil
+}
+
+// FindAll .
+func (*UserInfoAtomicService) FindAll() []UserInfo {
+	everyone := make([]UserInfo,0)
+	err := myegine.Find(&everyone)
+	checkErr(err)
+	return everyone
+}
+
+// FindByID .
+func (*UserInfoAtomicService) FindByID(id int) *UserInfo {
+	users := make([]UserInfo, 0)
+	err := myegine.Id(id).Find(&users)
+	checkErr(err)
+	return &users[0]
+}
+```
+
+`myegine.Insert(u)`将结构体数据插入数据库中
+
+查询多条数据使用`Find`方法，Find方法的第一个参数为`slice`的指针或`Map`指针，即为查询后返回的结果。
+
+#### 3. 数据服务测试
+
+```
+package entities
+
+import (
+	"fmt"
+	"time"
+	"strconv"
+	"testing"
+	"math/rand"
+)
+
+func TestUserService(t *testing.T){
+
+	ini_mes := "\nPlease input the number of operator you want:\n1.Insert\n2.FindAll\n3.FindById\n4.exit"
+	fmt.Println(ini_mes)
+
+	op := 1
+	fmt.Print("operatorNum:")
+	fmt.Print(op)
+
+	for(op != 4){
+
+		t := time.Now()
+		t_str := t.Format("2006-01-02 15:04:05")
+		prefix_message := "[Userinfo-test][Time:" + t_str + "]"
+
+		//插入数据
+		if (op == 1){
+			username := "zhangzemian"
+			departname := "javadevelop"
+			fmt.Println("Uername:" + username + ", departname:" + departname)
+
+			user := NewUserInfo(UserInfo{UserName:username, DepartName:departname})
+			UserInfoService.Save(user)
+
+			mes_userid := "UserID:" + strconv.Itoa(user.UID)
+			mes_username := "Username:" + user.UserName
+			mes_departname := "Departname:" + user.DepartName
+			mes_time := "Createtime:" + user.CreateAt.Format("2006-01-02 15:04:05")
+			message := prefix_message + "[Insert]" + mes_userid + "," + mes_username + "," + mes_departname + "," + mes_time
+			fmt.Println(message)
+		}
+		
+		//查找所有用户
+		if(op == 2){
+			query_all_userlist := UserInfoService.FindAll()
+
+			if len(query_all_userlist) == 0{
+				message := prefix_message + "[FindAll]There is not user in database"
+				fmt.Println(message)
+			} else {
+				for i := 0; i < len(query_all_userlist); i++{
+					user := query_all_userlist[i]
+					mes_userid := "UserID:" + strconv.Itoa(user.UID)
+					mes_username := "Username:" + user.UserName
+					mes_departname := "Departname:" + user.DepartName
+					mes_time := "Createtime:" + user.CreateAt.Format("2006-01-02 15:04:05")
+					message := prefix_message + "[FindAll]" + mes_userid + "," + mes_username + "," + mes_departname + "," + mes_time
+					fmt.Println(message)
+				}
+			}
+		}
+
+		//根据id查找用户
+		if (op == 3){
+			id_mes := "Please input the id of users"
+			fmt.Println(id_mes)
+			fmt.Print("UserID:")
+			id := rand.Intn(3)			
+
+			user := UserInfoService.FindByID(id)
+
+			if (user == nil){
+				message := prefix_message + "[FindByID]The user is not exist"
+				fmt.Println(message)
+			} else{
+				mes_userid := "UserID:" + strconv.Itoa(user.UID)
+				mes_username := "Username:" + user.UserName
+				mes_departname := "Departname:" + user.DepartName
+				mes_time := "Createtime:" + user.CreateAt.Format("2006-01-02 15:04:05")
+				message := prefix_message + "[FindByID]" + mes_userid + "," + mes_username + "," + mes_departname + "," + mes_time
+				fmt.Println(message)
+			}
+		}
+
+		//退出
+		if (op == 4){
+			fmt.Println("Bye")
+			break
+		}
+		fmt.Println(ini_mes)
+		fmt.Print("operatorNum:")
+		op = op + 1
+		fmt.Print(op)
+	}
+	
+}
+```
+
+.*test.go文件可用于集成测试，测试这三个模块结合起来使用是否可以正常运行，输入命令`go test userinfo_test.go`，测试结果如下图：
 
 ![img](实验截图/1.png)
 
-解析：
-
-`mx.PathPrefix("/static").Handler(http.StripPrefix("/static/",http.FileServer(http.Dir(webRoot+"/view/"))))`通过`StringPrefix`为所有静态文件访问路径加上独立前缀，它的含义是将 path 以 “/static” 前缀的 URL 都定位到 `webRoot + "/view/"` 为虚拟根目录的文件系统。 有必要描述这语句中的函数：
-
-- `http.Dir` 是类型。将字符串转为 `http.Dir` 类型，这个类型实现了 `FileSystem` 接口。（Dir 不是函数）
-
-- `http.FileServer()` 是函数，返回 `Handler` 接口，该接口处理 http 请求，访问 `root` 的文件请求。
-
-- `mx.PathPrefix` 添加前缀路径路由。
-
-  ​
-
-效果图：
-
-`url: localhost:8080/static/SignUp.html`
-
-![img](实验截图/2.png)
-
 </br>
 
-## 支持简单的js访问
+## 三. database/sql 与 orm 实现的异同
 
-regiser.go中的errorCheck:
+####编程效率
 
-```
-func errorCheck(formatter *render.Render) http.HandlerFunc{
-	iserror := true
-	if len(errorMessageSlice) == 0{
-		iserror = true
-	}
-	return func(w http.ResponseWriter, req *http.Request) {
-		formatter.JSON(w, http.StatusOK, struct {
-			ErrorSlice      []models.ErrorMessage`json:"errorslice"`
-			IsError         bool`json:"iserror"`
-        }{ErrorSlice: errorMessageSlice, IsError: iserror})
-    }
-}
-```
+orm框架ORM使所有的数据表都按照统一的标准精确地映射成结构体，使系统在代码层面保持准确统一，提供了很多高效便捷的接口，可以使用结构体自动对数据库进行增删改查，而database/sql则必须通过sql语言对数据库进行增删改查。使用orm代码量大量减少，编程效率显著提高，减少了重复的劳动，比database/sql优越
 
-errorcheck.js:
+#### 程序结构
 
-```
-$(document).ready(function() {
-    $.ajax({
-        url: "/static/error"
-    }).then(function(data) {
-        if(data.iserror){
-            for (var i=0;i<data.errorslice.length;i++){
-                $('#'+ data.errorslice[i].Id).text(data.errorslice[i].Message);
-            }
-        }
-    });
-});
-```
+使用orm实现数据库操作，结构简单易懂，因为orm已经提供了现成的接口可以自动进行增删改查，而database/sql则需要自定义各种接口，结构较为复杂，使用起来难度较高
 
-User.go:
+#### 服务性能
 
-```
-package models
-
-import(
-	"regexp"
-)
-
-//user's model
-type User struct {
-	Username      string
-	StudentId     string
-	Phone         string
-	Email         string
-}
-
-type ErrorMessage struct {
-	Id            string
-	Message       string
-}
-
-func IsAllValid(user User) []ErrorMessage{
-	var errorMessageSlice []ErrorMessage
-	if (isUsernameVaild(user.Username).Id != ""){
-		errorMessageSlice = append(errorMessageSlice, isUsernameVaild(user.Username))
-	}
-	if (isStudentIdVaild(user.StudentId).Id != ""){
-		errorMessageSlice = append(errorMessageSlice, isStudentIdVaild(user.StudentId))
-	}
-	if (isPhoneVaild(user.Phone).Id != ""){
-		errorMessageSlice = append(errorMessageSlice, isPhoneVaild(user.Phone))
-	}
-	if (isEmailVaild(user.Email).Id != ""){
-		errorMessageSlice = append(errorMessageSlice, isEmailVaild(user.Email))
-	}
-	return errorMessageSlice
-}
-
-func isUsernameVaild(username string) ErrorMessage{
-	id := ""
-	message := ""
-	match, _ := regexp.MatchString(`[a-zA-Z]{1}\w{5,17}`, username)
-	if !match {
-		id = "errorname"
-		message = "Attention:Username contains only a-z, A-Z or _, must begins with english letter, 6~8 characters"
-	}
-	return ErrorMessage{
-		id, message,
-	}
-}
-
-func isStudentIdVaild(stid string) ErrorMessage{
-	id := ""
-	message := ""
-	match, _ := regexp.MatchString(`[^0]{1}\d{7}`, stid)
-	if !match {
-		id = "errorsid"
-		message = "Attention:StudentId contains only 0~9, must begins without 0, 8 characters"
-	}
-	return ErrorMessage{
-		id, message,
-	}
-}
-
-func isPhoneVaild(phone string) ErrorMessage{
-	id := ""
-	message := ""
-	match, _ := regexp.MatchString(`^(1[3|4|5|8][0-9]\d{4,8})$`, phone)
-	if !match {
-		id = "errorphone"
-		message = "Attention:Phone contains only 0~9, must begins without 0, 11 characters"
-	}
-	return ErrorMessage{
-		id, message,
-	}
-}
-
-func isEmailVaild(username string) ErrorMessage{
-	id := ""
-	message := ""
-	match, _ := regexp.MatchString(`^([\w\.\_]{2,10})@(\w{1,}).([a-z]{2,4})$`, username)
-	if !match {
-		id = "erroremail"
-		message = "Attention:Email isn't allowed"
-	}
-	return ErrorMessage{
-		id, message,
-	}
-}
-
-```
-
-解析：
-
-在这里，定义两个个结构体
-
-```
-type User struct {
-	Username      string
-	StudentId     string
-	Phone         string
-	Email         string
-}
-type ErrorMessage struct {
-	Id            string
-	Message       string
-}
-```
-
-一个用来存储用户信息，一个用来存储用户的错误信息，通过正则表达式判断用户输入的信息是否符合规范要求，从而选择是否生成错误信息的slice。接着，调用一个
-
-`mx.HandleFunc("/static/error", errorCheck(formatter)).Methods("GET")`方法，当加载页面时，js文件会访问`/static/error`路由，获得该页面返回的错误信息，然后将错误信息填写到html模板对应的位置。
-
-效果图[显示错误信息]：
-
-![img](实验截图/7.png)
-
-</br>
-
-## 提交表单，并输出一个表格
-
-SignUp.html模板：
-
-```
-<!DOCTYPE html>
-<html>
-<head>
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-	<title>注册</title>
-	<link rel="stylesheet" type="text/css" href="css/SignUp.css" />
-	<script src="js/SignUpJquery.js"></script>
-	<script src="js/errorcheck.js"></script>
-</head>
-<body>
-	<h1>注册</h1>
-	<div id="signup_area">
-		<form action="/static/register"method="post" accept-charset="utf-8">
-			<div id="username_area">
-				<label>UserName<input type="text" id="text1" class="usermessage" name="name" value={{.Username}}></label>
-				<p id="errorname" class="error"></p>
-			</div>
-			<div id="sid_area">
-				<label>StudentId<input type="text" id="text2" class="usermessage" name="id" value={{.StudentId}}></label>
-				<p id="errorsid" class="error"></p>
-			</div>
-			<div id="phone_area">
-				<label>Phone<input type="text" id="text3" class="usermessage" name="phone" value={{.Phone}}></label>
-				<p id="errorphone" class="error"></p>
-			</div>
-			<div id="email_area">
-				<label>Email<input type="text" id="text4" class="usermessage" name="email" value={{.Email}}></label>
-				<p id="erroremail" class="error"></p>
-			</div>
-			<input type="submit" id="submission" value="Submit" />
-			<input type="reset" id="resetting" value="Reset" />
-		</form>
-	</div>
-</body>
-</html>
-```
-
-Detail.html模板：
-
-```
-<html>
-<head>
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-	<title>Detail</title>
-	<link rel="stylesheet" type="text/css" href="css/SignUp.css" />
-</head>
-<body>
-	<h1>Detail</h1>
-	<div id="detail_area">
-		<form action="postlogin" method="post" accept-charset="utf-8">
-			<div id="username_area">
-				<label>UserName<input type="text" id="text1" class="showmessage" onfocus="this.blur()" name="name" value={{.Username}}></label>
-				<p id="errorname" class="error"></p>
-			</div>
-			<div id="sid_area">
-				<label>StudentId<input type="text" id="text2" class="showmessage" onfocus="this.blur()" name="id" value={{.StudentId}}></label>
-				<p id="errorsid" class="error"></p>
-			</div>
-			<div id="phone_area">
-				<label>Phone<input type="text" id="text3" class="showmessage" onfocus="this.blur()" name="phone" value={{.Phone}}></label>
-				<p id="errorphone" class="error"></p>
-			</div>
-			<div id="email_area">
-				<label>Email<input type="text" id="text4" class="showmessage" onfocus="this.blur()" name="email" value={{.Email}}></label>
-				<p id="erroremail" class="error"></p>
-			</div>
-		</form>
-	</div>
-</body>
-</html>
-```
-
-register.go中的register：
-
-```
-func register(w http.ResponseWriter, r *http.Request){
-	r.ParseForm() 
-	if r.Method == "POST"{
-		user := &models.User{
-			r.Form["name"][0],
-			r.Form["id"][0],
-			r.Form["phone"][0],
-			r.Form["email"][0],
-		}
-		errorMessageSlice = models.IsAllValid(*user)
-		if(len(errorMessageSlice) == 0){
-			t, _ := template.ParseFiles("./view/Detail.html")
-			t.Execute(w, *user)
-		}else{
-			t, _ := template.ParseFiles("./view/SignUp.html")
-			t.Execute(w, *user)
-		}
-	}else{
-		errorMessageSlice = nil
-		t, _ := template.ParseFiles("./view/SignUp.html")
-		t.Execute(w, nil)
-	}
-}
-```
-
-解析：
-
-通过在service.go中调用`mx.HandleFunc("/static/register", register)`来进行表单处理，点击注册按钮时，网页访问`/static/register`，然后调用`register`函数，将请求中的表单信息进行解析，判断是否符合输入规范，不符合则停留在注册页面，并显示错误信息，否在跳转到详情页面，显示输入的信息
-
-效果图：
-
-注册失败：
-
-![img](实验截图/7.png)
-
-注册成功：
-
-![img](实验截图/8.png)
-
-</br>
-
-##对`/unknown`给出开发中的提示，返回码5xx
-
-error.go:
-
-```
-package service
-
-import(
-	"net/http"
-)
-
-func NotImplemented(w http.ResponseWriter, r *http.Request){
-	http.Error(w, "501 Not Implemented", 501)
-}
-
-func NotImplementedHandler() http.Handler{
-	return http.HandlerFunc(NotImplemented)
-}
-```
-
-这里的NotImplemented和NotImplementedHandler函数是模仿NotFound和NotFoundHandler函数实现的，通过调用`http.Error()`函数，对状态码和错误信息进行设置
-
-效果图：
-
-![img](实验截图/10.png)
-
-![img](实验截图/11.png)
-
-</br>
-
-##编写中间件，实现编码转换
-
-```
-package service
-
-import(
-	"net/http"
-	"github.com/axgle/mahonia"
-)
-
-func midwareGbk(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	r.ParseForm()
-	if len(r.Form) != 0{
-		for k, _ := range r.Form {
-			enc := mahonia.NewEncoder("utf-8")
-			r.Form[k][0] = enc.ConvertString(r.Form[k][0])
-		}
-	}
-	next(rw, r)
-	// do some stuff after
-  }
-```
-
-对请求中表单的数据统一进行utf-8格式转换，转成utf-8输出，这里使用到了`"github.com/axgle/mahonia"`这个库，`enc := mahonia.NewEncoder("utf-8")`定义了编码的类型
-
-效果图：
-
-![img](实验截图/12.png)
+orm 是用的反射技术、牺牲性能获得易用性，在处理多表联查、where条件复杂之类的查询时，ORM的语法会变得复杂且猥琐，而且越是功能强大的ORM越是消耗内存，因为一个ORM Object会带有很多成员变量和成员函数，因此性能明显比database/sql低很多
